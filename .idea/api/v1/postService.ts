@@ -44,7 +44,7 @@ app.use(express.json());
 // GET all posts
 app.get('/', async (req, res) => {
     try {
-        db.all('SELECT * FROM posts', [], (err, posts) => {
+        db.all('SELECT * FROM posts ORDER BY postTime DESC', [], (err, posts) => {
             if (err) {
                 console.error(err.message);
                 return res.status(500).send('Database error');
@@ -87,14 +87,14 @@ app.post('/', async (req, res) => {
     try {
         res.header('Access-Control-Allow-Origin','*')
         console.log(req.body);
-        const { title, content, userAuth } = req.body;
+        const { title, content, userAuth, userName } = req.body;
         
         if (!title || !content || !userAuth) {
             return res.status(400).send('Missing required fields');
         }
         
-        db.run('INSERT INTO posts(title, content, userAuth) VALUES(?, ?, ?)', 
-            [title, content, userAuth], 
+        db.run('INSERT INTO posts(title, content, userAuth, userName) VALUES(?, ?, ?, ?)',
+            [title, content, userAuth, userName],
             async function(err) {
                 if (err) {
                     console.error(err.message);
@@ -125,7 +125,8 @@ app.put('/post/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { title, content, userAuth } = req.body;
-        
+        res.header('Access-Control-Allow-Origin','*');
+        console.log('Got PUT    request')
         if (!title || !content || !userAuth) {
             return res.status(400).send('Missing required fields');
         }
@@ -191,7 +192,7 @@ app.get('/userPosts', async (req, res) => {
             return res.status(400).send('Missing userAuth parameter');
         }
 
-        db.all('SELECT * FROM posts WHERE userAuth =?', [userAuth], (err, posts) => {
+        db.all('SELECT * FROM posts WHERE userAuth =? ORDER BY postTime DESC', [userAuth], (err, posts) => {
             if (err) {
                 console.error(err.message);
                 return res.status(500).send('Database error');

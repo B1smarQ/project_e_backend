@@ -48,19 +48,6 @@ app.get('/', async (req: Request, res: Response) => {
         return res.status(401).json({ error: 'Missing login or password' });
     }
 
-    if(login === 'Admin' && password === '12345') {
-        console.log("Admin login")
-        await logEvent('info', 'Successful authentication', {
-            user: login,
-            ipAddress: req.ip
-        });
-        res.header('Content-Type', 'application/json');
-        return res.status(200).json({
-            message: 'Login successful',
-            authKey: 'admin'
-        });
-    }
-
     db.get('SELECT * FROM users WHERE login = ?', [login], async (err, user) => {
         if (err) {
             console.error(err);
@@ -94,7 +81,8 @@ app.get('/', async (req: Request, res: Response) => {
         res.header('Content-Type', 'application/json');
         return res.status(200).json({
             message: 'Login successful',
-            authKey
+            authKey: authKey,
+            userName: login
         });
     });
 });
@@ -155,7 +143,8 @@ app.post('/register', async (req, res) => {
 
             return res.status(201).json({
                 message: 'User registered successfully',
-                authKey: authKey
+                authKey: authKey,
+                userName: login
             });
         });
     });
