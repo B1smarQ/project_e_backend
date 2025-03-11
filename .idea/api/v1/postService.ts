@@ -44,7 +44,7 @@ app.use(express.json());
 // GET all posts
 app.get('/', async (req, res) => {
     try {
-        db.all('SELECT * FROM posts ORDER BY postTime DESC', [], (err, posts) => {
+        db.all('SELECT * FROM posts', [], (err, posts) => {
             if (err) {
                 console.error(err.message);
                 return res.status(500).send('Database error');
@@ -87,14 +87,14 @@ app.post('/', async (req, res) => {
     try {
         res.header('Access-Control-Allow-Origin','*')
         console.log(req.body);
-        const { title, content, userAuth, userName } = req.body;
+        const { title, content, userAuth, userName, threadId } = req.body;
         
         if (!title || !content || !userAuth) {
             return res.status(400).send('Missing required fields');
         }
         
-        db.run('INSERT INTO posts(title, content, userAuth, userName) VALUES(?, ?, ?, ?)',
-            [title, content, userAuth, userName],
+        db.run('INSERT INTO posts(title, content, userAuth, userName, threadId) VALUES(?, ?, ?, ?, ?)',
+            [title, content, userAuth, userName, threadId],
             async function(err) {
                 if (err) {
                     console.error(err.message);
@@ -120,13 +120,128 @@ app.post('/', async (req, res) => {
     }
 });
 
+app.post('/threads', async (req, res) => {
+    res.header('Access-Control-Allow-Origin','*')
+    try{
+        const {title,author} = req.body;
+        console.log('Inserting into db')
+        db.run('INSERT INTO threads(threadTitle, threadAuthor) VALUES(?,?)', [title, author], async function(err){
+            if(err){
+                console.log("ERROR")
+                console.error(err.message);
+                return res.status(500).send('Database error');
+            }
+        })
+        await logEvent('info', 'Thread created', {
+            threadId: this.lastID,
+            author: author
+        });
+        res.status(201).json({
+            message: 'Thread created',
+
+        })
+    }
+    catch(err){
+        console.log("ERROR")
+        // @ts-ignore
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+})
+
+// GET all threads
+app.get('/threads', async (req, res) => {
+    try{
+        db.all(`
+            SELECT 
+                t.*,
+                COUNT(p.id) as messages
+            FROM 
+                threads t
+            LEFT JOIN 
+                posts p ON t.id = p.threadId
+            GROUP BY 
+                t.id
+            ORDER BY messages DESC
+        `, [], (err, threads) => {
+            if(err){
+                console.error(err.message);
+                return res.status(500).send('Database error');
+            }
+            console.log(threads)
+            res.status(200).json(threads);
+        })
+    }
+    catch(err){
+        // @ts-ignore
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+})
+
+//GET all posts from a thread by thread ID
+app.get('/threads/:id/posts', async (req, res) => {
+    try {
+        const { id } = req.params;
+        db.all('SELECT * FROM posts WHERE threadId = ?', [id], (err, posts) => {
+            if (err) {
+                console.error(err.message);
+                return res.status(500).send('Database error');
+            }
+
+            if (!posts.length) {
+                return res.status(404).send('No posts found in this thread');
+            }
+
+            res.status(200).json(posts);
+        });
+    } catch (err) {
+        // @ts-ignore
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+});
+
+//Delete a thread by thread ID
+app.delete('/threads/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        db.run('DELETE FROM threads WHERE id =?', [id], async function(err) {
+            if (err) {
+                console.error(err.message);
+                return res.status(500).send('Database error');
+            }
+
+            if (this.changes === 0) {
+                return res.status(404).send('Thread not found');
+            }
+
+            // Log the deletion event
+            await logEvent('info', 'Thread deleted', { threadId: id });
+
+        });
+        //Delete all posts in a thread
+        db.run('DELETE FROM posts WHERE threadId =?', [id], async function(err){
+            if(err){
+                console.error(err.message);
+                return res.status(500).send('Database error');
+            }
+            await logEvent('info', 'Thread posts deleted', { threadId: id})
+            res.status(200).send('Thread deleted');
+        })
+    } catch (err) {
+        // @ts-ignore
+        console.error(err.message);
+        res.status(500).send('Server error');
+    }
+});
+
 // PUT update an existing post
 app.put('/post/:id', async (req, res) => {
     try {
         const { id } = req.params;
         const { title, content, userAuth } = req.body;
-        res.header('Access-Control-Allow-Origin','*');
-        console.log('Got PUT    request')
+        
         if (!title || !content || !userAuth) {
             return res.status(400).send('Missing required fields');
         }
