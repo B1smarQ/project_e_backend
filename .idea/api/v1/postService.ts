@@ -2,6 +2,7 @@ import express = require('express');
 import sqlite3 from "sqlite3";
 import axios from "axios";
 import cors from "cors";
+import amqp from "amqplib/callback_api";
 const app = express();
 const PORT = 3005
 
@@ -9,18 +10,20 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded( {extended : true}))
 
-//TODO: switch to mongoDB
-async function logEvent(level: string, message: string, metadata?: Record<string, any>) {
-    try {
-        await axios.post('http://localhost:3004/log', {
-            service: 'post-service',
-            level,
-            message,
-            metadata
-        });
-    } catch (error) {
-        console.error('Failed to log event:', error);
-    }
+async function logEvent(level: string, logMessage: string, metadata?: Record<string, any>) {
+    amqp.connect('amqps://erhfizhg:sCrrs3sPDKxBKQrUC54Z2nV5jlZtolqZ@hawk.rmq.cloudamqp.com/erhfizhg', (err, connection) => {
+        if(err){
+            console.log(err);
+        }
+        let queue = 'logs'
+        let message = {service: 'post-service', level: level, message: logMessage, metadata:metadata};
+        connection.createChannel((err1, chan) =>{
+            chan.assertQueue(queue,{
+                durable:false
+            })
+            chan.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
+        })
+    })
 }
 
 // Connect to SQLite database

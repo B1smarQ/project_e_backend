@@ -4,20 +4,24 @@ import sqlite3 from 'sqlite3';
 import path from 'path';
 import fs from 'fs';
 import axios from 'axios';
+  import amqp from "amqplib/callback_api";
 
 const PORT = process.env.PORT || 3002;
 
-async function logEvent(level: string, message: string, metadata?: Record<string, any>) {
-    try {
-        await axios.post('http://localhost:3004/log', {
-            service: 'file-service',
-            level,
-            message,
-            metadata
-        });
-    } catch (error) {
-        console.error('Failed to log event:', error);
+async function logEvent(level: string, logMessage: string, metadata?: Record<string, any>) {
+  amqp.connect('amqps://erhfizhg:sCrrs3sPDKxBKQrUC54Z2nV5jlZtolqZ@hawk.rmq.cloudamqp.com/erhfizhg', (err, connection) => {
+    if(err){
+      console.log(err);
     }
+    let queue = 'logs'
+    let message = {service: 'file-service', level: level, message: logMessage, metadata:metadata};
+    connection.createChannel((err1, chan) =>{
+      chan.assertQueue(queue,{
+        durable:false
+      })
+      chan.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
+    })
+  })
 }
 
 //Создание директории для загрузки файлов при ее отсутствии

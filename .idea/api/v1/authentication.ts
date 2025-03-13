@@ -2,7 +2,8 @@ import express, { Request, Response } from 'express';
 import axios from 'axios';
 import cors from 'cors';
 import sqlite3 from "sqlite3";
-
+import {log} from "node:util";
+const amqp = require('amqplib/callback_api');
 const PORT = process.env.PORT || 3001;
 const app = express();
 app.use(cors());
@@ -23,17 +24,20 @@ const db = new sqlite3.Database('users.db',(err) =>{
     )`);
 });
 
-async function logEvent(level: string, message: string, metadata?: Record<string, any>) {
-    try {
-        await axios.post('http://localhost:3004/log', {
-            service: 'auth-service',
-            level,
-            message,
-            metadata
-        });
-    } catch (error) {
-        console.error('Failed to log event:', error);
-    }
+async function logEvent(level: string, logMessage: string, metadata?: Record<string, any>) {
+    amqp.connect('amqps://erhfizhg:sCrrs3sPDKxBKQrUC54Z2nV5jlZtolqZ@hawk.rmq.cloudamqp.com/erhfizhg', (err, connection) => {
+        if(err){
+            console.log(err);
+        }
+        let queue = 'logs'
+        let message = {service: 'auth-service', level: level, message: logMessage, metadata:metadata};
+        connection.createChannel((err1, chan) =>{
+            chan.assertQueue(queue,{
+                durable:false
+            })
+            chan.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
+        })
+    })
 }
 
 
